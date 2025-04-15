@@ -1,6 +1,6 @@
 import numpy as np
 import sklearn
-from staticvectors import StaticVectors # Library for handling static word embeddings (like Word2Vec, GloVe)
+from staticvectors import StaticVectors
 
 # Import custom preprocessing functions
 from preprocessing import downsample_word_vectors, make_delayed

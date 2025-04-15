@@ -1,2 +1,4 @@
 Description of code files for clarity and reproducibility:
 - code/modeling_and_evaluation.ipynb: This notebook gets the embeddings (3 different types) and trains a Ridge regression model for each (for both Subject 2 and Subject 3). It conducts a hyperparameter search over various values of alpha (regularization parameter) and gets the best model. It also conducts a more detailed evaluation to view the distribution of CC across voxels and conducts stability analysis across subjects. This notebook generates the visualizations for the CC distributions.
+- code/word_embeddings.py: This file contains the components for getting all the 3 types of embeddings (BoW, Word2Vec, and GloVe)
+- code/EDA folder: This folder contains the EDA notebooks and a README file detailing the files in the folder.
