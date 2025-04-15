@@ -1,0 +1,23 @@
+We have all agreed on these attributions:
+
+Ashley Zhang worked on:
+- Purpose the model selection criteria
+- Some EDA, "Distribution of story lengths in training/validation dataset" and "Distribution of fMRI signals in training/validation dataset"
+- Designing and implementing the word embedding and sentence embedding
+- Writing the corresponding sections in the report, plus the introduction and conclusion
+- Final review of the report
+
+Kishore Chidambaram worked on:
+- Purpose the model selection criteria
+- Train the ridge regression and hyperparameter tuning
+- Post-hoc analysis of the ridge regression
+- Stability analysis of the ridge regression
+- Writing the corresponding sections in the report
+
+Connor McCaffrey worked on:
+- All other EDA
+- Data cleaning for EDA
+- Writing the corresponding sections in the report
+
+Rawi Baransy worked on:
+- Dissusion and proofreading of the report
