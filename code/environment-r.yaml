@@ -1,0 +1,14 @@
+name: stat214-r
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - r
+  - r-essentials
+  - r-tidyverse
+  - rstudio-desktop
+  - r-ggally
+  - r-rlang
+  - r-glue
+  - r-ggtext
+  - r-patchwork

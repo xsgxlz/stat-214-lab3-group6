@@ -7,6 +7,8 @@ This directory contains two primary scripts:
    
 2. `eda_plots.ipynb`: This R notebook loads the cleaned `.csv` files and generates various exploratory data analysis plots. The resulting figures are saved to the `figs` directory.
 
+3. `eda_other.ipynb`: This Python notebook contains additional exploratory data analysis that does not depend on the cleaned data.
+
 ##### Relevant Data
 
 - `clean.csv`: each row contains fMRI signal summary statistics (for both subject 2 and 3) at a single time point within a single story.
