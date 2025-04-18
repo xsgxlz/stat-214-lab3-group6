@@ -28,7 +28,7 @@ class TextDataset(Dataset):
     def __getitem__(self, idx):
         return {
             "input_ids": self.encodings["input_ids"][idx],
-            "attention_mask": self.encodings["attention_mask"][idx].unsqueeze(0).unsqueeze(0)
+            "attention_mask": self.encodings["attention_mask"][idx].to(torch.bool).reshape((1, 1, -1)),
         }
 
 # --- MAIN EXECUTION ---

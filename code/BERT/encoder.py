@@ -195,7 +195,8 @@ class SelfMultiHeadAttention(nn.Module):
         self,
         x: torch.Tensor,
         input_pos: Optional[torch.Tensor] = None,
-        is_causal=True,
+        attn_mask: Optional[torch.Tensor] = None,
+        is_causal=False,
     ) -> torch.Tensor:
         """
         Forward pass; runs the following process:
@@ -256,7 +257,7 @@ class SelfMultiHeadAttention(nn.Module):
             query,                      # (N, n_heads, L, head_dim)
             key,                        # (N, n_kv_heads, L, head_dim)
             value,                      # (N, n_kv_heads, L, head_dim)
-            attn_mask=None,
+            attn_mask=attn_mask,       # Optional attention mask
             dropout_p=self.dropout if self.training else 0.0, # Apply dropout only during training
             is_causal=is_causal,
             enable_gqa=self.is_gqa       # Enable GQA based on head counts
@@ -331,6 +332,7 @@ class TransformerBlock(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
+        attn_mask: Optional[torch.Tensor] = None,
         # Note: input_pos for RoPE is handled implicitly or needs to be passed
         # if SelfMultiHeadAttention requires it dynamically per block.
         # Currently, SelfMultiHeadAttention uses input_pos=None by default.
@@ -348,7 +350,7 @@ class TransformerBlock(nn.Module):
         """
         # Apply attention with pre-normalization and residual connection
         # Causal masking and RoPE are handled inside self.attention
-        h = x + self.attention(self.attention_norm(x), is_causal=True) # input_pos=None implicit
+        h = x + self.attention(self.attention_norm(x), attn_mask=attn_mask, is_causal=False) # input_pos=None implicit
 
         # Apply feed-forward with pre-normalization and residual connection
         out = h + self.feed_forward(self.ffn_norm(h))
@@ -356,7 +358,7 @@ class TransformerBlock(nn.Module):
 
 class Transformer(nn.Module):
     """Full Transformer model with multiple layers."""
-    def __init__(self, params: ModelArgs):
+    def __init__(self, params: ModelArgs, pre_train_embeddings: Optional[nn.Module] = None):
         """
         Initialize the Transformer model.
 
@@ -369,7 +371,19 @@ class Transformer(nn.Module):
         self.n_layers = params.n_layers
 
         # Token embedding layer
-        self.tok_embeddings = nn.Embedding(params.vocab_size, params.dim) # padding_idx often set based on tokenizer
+        if pre_train_embeddings is None:
+            self.tok_embeddings = nn.Embedding(params.vocab_size, params.dim, padding_idx=0)
+        else:
+            for param in pre_train_embeddings.parameters():
+                param.requires_grad = False
+
+            if pre_train_embeddings.embedding_dim != params.dim:
+                self.tok_embeddings = nn.Sequential(
+                    pre_train_embeddings,
+                    nn.Linear(pre_train_embeddings.embedding_dim, params.dim, bias=False)
+                )
+            else:
+                self.tok_embeddings = pre_train_embeddings
 
         # Initialize RoPE module once, to be shared by all layers
         self.rope = RotaryPositionalEmbeddings(
@@ -393,7 +407,7 @@ class Transformer(nn.Module):
         self.params.max_seq_len = max_seq_len # Update stored max_seq_len
         return self
 
-    def forward(self, tokens: torch.Tensor):
+    def forward(self, tokens: torch.Tensor, attn_mask: Optional[torch.Tensor] = None):
         """
         Forward pass for the Transformer model.
 
@@ -418,7 +432,7 @@ class Transformer(nn.Module):
         # Pass through transformer layers sequentially
         # RoPE (using default sequential positions) and causal masking are handled within each block's attention
         for layer in self.layers:
-            h = layer(h)
+            h = layer(h, attn_mask)
 
         h = self.norm(h)  # Apply final normalization (bsz, seqlen, dim)
         output = self.output(h)  # Project to vocabulary logits (bsz, seqlen, vocab_size)
