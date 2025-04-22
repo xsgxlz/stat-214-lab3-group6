@@ -439,3 +439,4 @@ class Transformer(nn.Module):
 
         # Return logits, usually float32 for stability with loss functions
         return output
+    
