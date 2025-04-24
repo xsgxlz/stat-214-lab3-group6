@@ -40,20 +40,6 @@ def mask_tokens(input_ids, vocab_size, mask_token_id, pad_token_id, mlm_prob=0.1
     # 10% remain unchanged (masked_indices & not replaced & not random)
     return input_ids, labels
 
-
-def train_bert(model, dataloader, tokenizer, epochs=3, lr=5e-4, device='cuda'):
-    '''
-    TODO: Implement training loop for BERT
-    Args:
-        model: BERT model
-        dataloader: Data loader
-        tokenizer: Tokenizer
-        epochs: Number of epochs
-        lr: Learning rate
-        device: Device to run the model on
-    '''
-    pass
-
 @dataclass(frozen=True)
 class Args:
     # Training parameters

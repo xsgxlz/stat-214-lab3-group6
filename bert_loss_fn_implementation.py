@@ -27,6 +27,8 @@ def bert_loss_fn(input_ids, logits, loss_mask):
     input_ids_masked = input_ids[loss_mask]
 
     # compute cross-entropy on unnormalized logits and true class indices
-    loss = torch.nn.functional.cross_entropy(logits_masked, input_ids_masked)
+    loss = torch.nn.functional.cross_entropy(logits_masked, input_ids_masked, reduction='sum')
+    # normalize loss by batch size
+    loss = loss / batch_size
     
     return loss
