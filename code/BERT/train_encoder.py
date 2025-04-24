@@ -3,17 +3,43 @@ from dataclasses import dataclass
 
 import torch
 # --- MLM MASKING ---
-def mask_tokens(input_ids, vocab_size, mask_token_id, pad_token_id, mlm_prob=0.15 ):
-    '''
-    TODO: Implement MLM masking
+import torch
+
+def mask_tokens(input_ids, vocab_size, mask_token_id, pad_token_id, mlm_prob=0.15):
+    """
+    Prepare masked tokens inputs/labels for masked language modeling.
     Args:
-        input_ids: Input IDs
-        vocab_size: Vocabulary size
-        mask_token_id: Mask token ID
-        pad_token_id: Pad token ID
-        mlm_prob: Probability of masking
-    '''
-    pass
+        input_ids (Tensor): [batch_size, seq_len] tensor of token ids
+        vocab_size (int): total number of tokens in vocab
+        mask_token_id (int): token id used for [MASK]
+        pad_token_id (int): token id used for padding
+        mlm_prob (float): probability of masking a token
+    Returns:
+        masked_input_ids: tensor with some tokens replaced for MLM
+        labels: tensor with -100 (ignore index) except masked tokens with original id
+    """
+    labels = input_ids.clone()
+    # Generate mask: which tokens to mask
+    probability_matrix = torch.full(input_ids.shape, mlm_prob)
+    special_tokens_mask = (input_ids == pad_token_id)
+    probability_matrix.masked_fill_(special_tokens_mask, value=0.0)
+    masked_indices = torch.bernoulli(probability_matrix).bool()
+    
+    # Set labels to -100 for non-masked positions so loss is ignored
+    labels[~masked_indices] = -100
+
+    # Replace 80% of the masked tokens with [MASK]
+    indices_replaced = torch.bernoulli(torch.full(input_ids.shape, 0.8)).bool() & masked_indices
+    input_ids[indices_replaced] = mask_token_id
+
+    # Replace 10% of the masked tokens with random token
+    indices_random = torch.bernoulli(torch.full(input_ids.shape, 0.5)).bool() & masked_indices & ~indices_replaced
+    random_tokens = torch.randint(low=0, high=vocab_size, size=input_ids.shape, dtype=torch.long)
+    input_ids[indices_random] = random_tokens[indices_random]
+
+    # 10% remain unchanged (masked_indices & not replaced & not random)
+    return input_ids, labels
+
 
 def train_bert(model, dataloader, tokenizer, epochs=3, lr=5e-4, device='cuda'):
     '''
