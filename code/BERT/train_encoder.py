@@ -5,9 +5,12 @@ import torch
 # --- MLM MASKING ---
 import torch
 
+import torch
+
 def mask_tokens(input_ids, vocab_size, mask_token_id, pad_token_id, mlm_prob=0.15):
     """
     Prepare masked tokens inputs/labels for masked language modeling.
+    (Corrected version with explicit device handling)
     Args:
         input_ids (Tensor): [batch_size, seq_len] tensor of token ids
         vocab_size (int): total number of tokens in vocab
@@ -18,27 +21,35 @@ def mask_tokens(input_ids, vocab_size, mask_token_id, pad_token_id, mlm_prob=0.1
         masked_input_ids: tensor with some tokens replaced for MLM
         labels: tensor with -100 (ignore index) except masked tokens with original id
     """
+    device = input_ids.device  # Get device from input tensor
     labels = input_ids.clone()
+
     # Generate mask: which tokens to mask
-    probability_matrix = torch.full(input_ids.shape, mlm_prob)
+    probability_matrix = torch.full(input_ids.shape, mlm_prob, device=device)
     special_tokens_mask = (input_ids == pad_token_id)
     probability_matrix.masked_fill_(special_tokens_mask, value=0.0)
+    # Ensure boolean tensor for masked_indices is created
     masked_indices = torch.bernoulli(probability_matrix).bool()
-    
+
     # Set labels to -100 for non-masked positions so loss is ignored
-    labels[~masked_indices] = -100
+    labels[~masked_indices] = -100 # -100 is the ignore index for CrossEntropyLoss
 
     # Replace 80% of the masked tokens with [MASK]
-    indices_replaced = torch.bernoulli(torch.full(input_ids.shape, 0.8)).bool() & masked_indices
-    input_ids[indices_replaced] = mask_token_id
+    # Ensure boolean tensor for indices_replaced is created
+    indices_replaced = torch.bernoulli(torch.full(input_ids.shape, 0.8, device=device)).bool() & masked_indices
+    # Clone input_ids before modifying to avoid modifying original if it's needed elsewhere
+    masked_input_ids = input_ids.clone()
+    masked_input_ids[indices_replaced] = mask_token_id
 
     # Replace 10% of the masked tokens with random token
-    indices_random = torch.bernoulli(torch.full(input_ids.shape, 0.5)).bool() & masked_indices & ~indices_replaced
-    random_tokens = torch.randint(low=0, high=vocab_size, size=input_ids.shape, dtype=torch.long)
-    input_ids[indices_random] = random_tokens[indices_random]
+    # Ensure boolean tensor for indices_random is created
+    indices_random = torch.bernoulli(torch.full(input_ids.shape, 0.5, device=device)).bool() & masked_indices & ~indices_replaced 
+    random_tokens = torch.randint(low=0, high=vocab_size, size=input_ids.shape, dtype=torch.long, device=device)
+    masked_input_ids[indices_random] = random_tokens[indices_random]
 
     # 10% remain unchanged (masked_indices & not replaced & not random)
-    return input_ids, labels
+
+    return masked_input_ids, labels
 
 @dataclass(frozen=True)
 class Args:
