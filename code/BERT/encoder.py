@@ -399,7 +399,7 @@ class Transformer(nn.Module):
         self.norm = nn.RMSNorm(params.dim, eps=params.norm_eps)
 
         # Output projection to vocabulary logits
-        self.output = nn.Linear(params.dim, params.vocab_size, bias=False)
+        self.output = nn.Linear(params.dim, params.vocab_size, bias=True)
 
     def update_max_seq_len(self, max_seq_len: int):
         """Updates the RoPE cache for a potentially new max sequence length."""
