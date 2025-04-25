@@ -407,7 +407,7 @@ class Transformer(nn.Module):
         self.params.max_seq_len = max_seq_len # Update stored max_seq_len
         return self
 
-    def forward(self, tokens: torch.Tensor, attn_mask: Optional[torch.Tensor] = None):
+    def forward(self, tokens: torch.Tensor, attn_mask: Optional[torch.Tensor] = None, classification: bool = True):
         """
         Forward pass for the Transformer model.
 
@@ -435,7 +435,10 @@ class Transformer(nn.Module):
             h = layer(h, attn_mask)
 
         h = self.norm(h)  # Apply final normalization (bsz, seqlen, dim)
-        output = self.output(h)  # Project to vocabulary logits (bsz, seqlen, vocab_size)
+        if classification:
+            output = self.output(h)  # Project to vocabulary logits (bsz, seqlen, vocab_size)
+        else:
+            output = h  # For non-classification tasks, return the final hidden states
 
         # Return logits, usually float32 for stability with loss functions
         return output
