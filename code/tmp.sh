@@ -14,9 +14,9 @@ cd "/jet/home/azhang19/stat 214/stat-214-lab3-group6" # Change to the project di
 # --- Run the Python script ---
 # Use the variables to set the command-line arguments
 python -u "/jet/home/azhang19/stat 214/stat-214-lab3-group6/code/BERT/train.py" \
-    --dim 64 \
-    --hidden-dim 224 \
-    --mlm-prob 0.2 \
-    --save-path "/jet/home/azhang19/stat 214/stat-214-lab3-group6/code/ckpts"
+    --dim "64" \
+    --hidden-dim "224" \
+    --mlm-prob "0.15" \
+    --save-path "/ocean/projects/mth240012p/azhang19/lab3/ckpts"
 
 echo "Task $SLURM_ARRAY_TASK_ID finished."

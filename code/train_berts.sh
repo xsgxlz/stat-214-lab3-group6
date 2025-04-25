@@ -46,6 +46,6 @@ python "/jet/home/azhang19/stat 214/stat-214-lab3-group6/code/BERT/train.py" \
     --dim "$current_dim" \
     --hidden-dim "$current_hidden_dim" \
     --mlm-prob "$current_mlm_prob" \
-    --save-path "/jet/home/azhang19/stat 214/stat-214-lab3-group6/code/ckpts"
+    --save-path "/ocean/projects/mth240012p/azhang19/lab3/ckpts"
 
 echo "Task $SLURM_ARRAY_TASK_ID finished."
