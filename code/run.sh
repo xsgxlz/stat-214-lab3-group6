@@ -1,1 +1,3 @@
 # The project is organized into several ipynb files, each containing a different part of the analysis, so there is no single entry point. Instead, we recommend running each notebook in order to reproduce the results. The notebooks should produce all the plots and tables in the report.
+
+# For the BERT pretraining, we recommend using the `code/BERT/train_berts.sh` script, which will train the BERT models on the pretraining data.
