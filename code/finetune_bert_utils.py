@@ -34,9 +34,6 @@ def get_sliding_window_embeddings(
     if device is None:
         device = token_tensor.device
     
-    base_model.to(device)
-    base_model.eval() # Set model to evaluation mode
-
     batch_size, original_seq_len = token_tensor.shape
     hidden_size = base_model.config.hidden_size
 
