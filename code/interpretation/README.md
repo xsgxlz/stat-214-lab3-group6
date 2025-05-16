@@ -13,8 +13,8 @@ This directory contains three primary notebooks:
 ##### Relevant Data
 
 - `{score}_{story}_subj{subject}.pkl`: output of `run_shap_lime.ipynb`, input to `clean.ipynb` (8 separate files, not on GitHub due to file sizes)
-- `{score}_{story}_subj{subject}.csv`: output of `clean,ipynb`, input to `importance_plots.ipynb` (8 separate files, found in `data` directory)
-- `{story}.csv`: output of `importance_plots.ipynb`, one of various dataframes used to make plots.
+- `{score}_{story}_subj{subject}.csv`: output of `clean.ipynb`, input to `importance_plots.ipynb` (8 separate files, found in `data` directory)
+- `{story}.csv`: output of `importance_plots.ipynb` (2 separate files, found in `data` directory), one of various dataframe formats used to make plots.
 
 ##### Dependencies
 
