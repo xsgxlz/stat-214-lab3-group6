@@ -1,0 +1,199 @@
+---
+title: "Untitled"
+format: html
+---
+
+```{python}
+import matplotlib.pyplot as plt
+import seaborn as sns
+import pandas as pd
+from scipy.stats import spearmanr
+
+# Load the uploaded CSV file
+df = pd.read_csv('buck.csv')
+df.head()
+
+# Filter out rows with missing words
+df_scatter = df.dropna(subset=['word']).copy()
+
+####################################################
+
+# Create scatter plot without coloring by word
+plt.figure(figsize=(8, 6))
+sns.scatterplot(data=df_scatter, x='rank_avg_shap', y='rank_avg_lime', color='black', s=40, edgecolor=None)
+
+# Fit and plot regression line
+sns.regplot(data=df_scatter, x='rank_avg_shap', y='rank_avg_lime', scatter=False, color='gray', line_kws={"linestyle":"--"})
+
+plt.xlabel("Average SHAP Rank (Higher = More Important)")
+plt.ylabel("Average LIME Rank (Higher = More Important)")
+plt.title("SHAP vs LIME Word Importance Rankings (No Color)")
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+
+
+# Compute Spearman correlation
+spearman_corr, p_value = spearmanr(df_scatter['rank_avg_shap'], df_scatter['rank_avg_lime'])
+spearman_corr, p_value
+```
+
+
+
+```{python}
+####################################################
+
+# more analysis
+def corrected_region_high_rank_important(row):
+    if row['rank_avg_shap'] > 250 and row['rank_avg_lime'] > 250:
+        return 'Important to Both'
+    elif row['rank_avg_shap'] > 250 and row['rank_avg_lime'] < 50:
+        return 'Important to SHAP only'
+    elif row['rank_avg_shap'] < 50 and row['rank_avg_lime'] > 250:
+        return 'Important to LIME only'
+    elif row['rank_avg_shap'] < 50 and row['rank_avg_lime'] < 50:
+        return 'Not Important to Either'
+    else:
+        return 'Mixed/Intermediate'
+
+# Apply  labels
+df_scatter['region_final'] = df_scatter.apply(corrected_region_high_rank_important, axis=1)
+
+# Plot with final labels
+plt.figure(figsize=(10, 8))
+sns.scatterplot(data=df_scatter, x='rank_avg_shap', y='rank_avg_lime', hue='region_final', palette='Set2', alpha=0.7)
+
+plt.xlabel("Average SHAP Rank (Higher = More Important)")
+plt.ylabel("Average LIME Rank (Higher = More Important)")
+plt.title("SHAP vs LIME Ranks by Final Region Labels")
+plt.xlim(0, df_scatter['rank_avg_shap'].max() + 10)
+plt.ylim(0, df_scatter['rank_avg_lime'].max() + 10)
+plt.grid(True)
+plt.tight_layout()
+plt.legend(title='Region')
+plt.show()
+
+```
+
+
+```{python}
+
+####################################################
+# base df
+df_words = df.dropna(subset=['word']).copy()
+df_words['region'] = df_scatter['region_final']  # assume df_scatter['region_final'] exists
+
+# Filter to key regions
+focus_regions = ['Important to SHAP only', 'Important to Both', 'Important to LIME only']
+df_focus = df_words[df_words['region'].isin(focus_regions)]
+
+# Assign primary_chunk based on mode
+chunk_mode = df_focus.groupby('word')['chunk_id'].agg(lambda x: x.mode().iloc[0] if not x.mode().empty else x.iloc[0])
+df_focus = df_focus.merge(chunk_mode.rename('primary_chunk'), on='word')
+
+# Create top words summary table
+top_words_by_region_with_label = (
+    df_focus.groupby('region')
+    .apply(
+        lambda g: (
+            g[['word', 'primary_chunk', 'rank_avg_shap', 'rank_avg_lime']]
+            .drop_duplicates()
+            .sort_values(by='rank_avg_shap', ascending=False)
+            .head(10)
+            .assign(region=g.name)
+        )
+    )
+    .reset_index(drop=True)
+    .rename(columns={'region': 'Region'})
+)
+
+# Display the result
+print(top_words_by_region_with_label)
+```
+
+
+
+
+
+
+
+
+```{python}
+
+####################################################
+
+# Calculate absolute and signed difference in ranks between SHAP and LIME
+holder = df_focus[df_focus["word_id"] == 1]
+
+df_focus['rank_diff'] = df_focus['rank_avg_shap'] - df_focus['rank_avg_lime']
+df_focus['rank_diff_abs'] = df_focus['rank_diff'].abs()
+
+# Group by word to ensure no duplicates then take mean ranks per word
+agg_disagreements = (
+    df_focus.groupby('word')[['rank_avg_shap', 'rank_avg_lime']]
+    .mean()
+    .assign(rank_diff=lambda x: (x['rank_avg_shap'] - x['rank_avg_lime']).abs())
+    .sort_values(by='rank_diff', ascending=False)
+    .head(10)
+    .reset_index()
+)
+
+# visualization
+viz_df_clean = agg_disagreements.melt(id_vars='word', value_vars=['rank_avg_shap', 'rank_avg_lime'], var_name='Method',value_name='Avg Rank')
+viz_df_clean['Method'] = viz_df_clean['Method'].map({
+    'rank_avg_shap': 'SHAP',
+    'rank_avg_lime': 'LIME'
+})
+
+# Plot
+plt.figure(figsize=(12, 6))
+sns.barplot(data=viz_df_clean, y='word', x='Avg Rank', hue='Method', palette='pastel')
+
+plt.title('Top Disagreement Words Between SHAP and LIME (Cleaned)')
+plt.xlabel('Average Importance Rank (Higher = More Important)')
+plt.ylabel('Word')
+plt.legend(title='Method', loc='lower right')
+plt.grid(axis='x', linestyle='--', alpha=0.6)
+plt.tight_layout()
+plt.show()
+
+
+```
+
+
+```{python}
+####################################################
+
+
+# Compute the variance of the difference in average ranks (SHAP - LIME)
+rank_diff_variance = df_focus['rank_diff'].var()
+rank_diff_variance
+rank_diff_std = rank_diff_variance **(1/2)
+rank_diff_std
+
+
+# Calculate mean of the rank differences
+rank_diff_mean = df_focus['rank_diff'].mean()
+
+# Plot 
+plt.figure(figsize=(10, 6))
+sns.histplot(df_focus['rank_diff'], bins=30, kde=True, color='skyblue')
+plt.axvline(rank_diff_mean, color='red', linestyle='--', label=f'Mean = {rank_diff_mean:.2f}')
+
+plt.title('Distribution of Rank Differences (SHAP - LIME)')
+plt.xlabel('Rank Difference')
+plt.ylabel('Word Count')
+plt.legend()
+plt.grid(True, linestyle='--', alpha=0.6)
+plt.tight_layout()
+plt.show()
+
+rank_diff_mean, rank_diff_std
+
+
+```
+
+
+
+
+
