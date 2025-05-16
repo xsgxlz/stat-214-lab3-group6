@@ -7,3 +7,4 @@ dependencies:
   - r-essentials
   - r-tidyverse
   - rstudio-desktop
+  - rlang
