@@ -20,6 +20,9 @@ This directory contains three primary notebooks:
 
 - Python: 
   - `numpy`
+  - `seaborn`
+  - `scipy.stats`
+  - `spearmanr`
   - `pandas`
   - `os`
   - `pickle`
