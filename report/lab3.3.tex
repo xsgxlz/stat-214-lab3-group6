@@ -1,0 +1,825 @@
+\documentclass[10pt,letterpaper]{article}
+\usepackage{geometry}
+\geometry{margin=1in}
+\usepackage{graphicx}
+\usepackage[dvipsnames]{xcolor}
+\usepackage{moresize}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.5em}
+
+%make lists tighter
+\usepackage{enumitem}
+\setlist{nolistsep}
+
+%reduce spacing before and after section
+\usepackage{titlesec}
+% reduce section, subsection, etc spacing
+\usepackage{titlesec}
+\titlespacing*{\section}{0pt}{0\baselineskip}{0\baselineskip}
+\titlespacing*{\subsection}{0pt}{0\baselineskip}{0\baselineskip}
+\titlespacing*{\subsubsection}{0pt}{0\baselineskip}{0\baselineskip}
+
+%reduce list spacing
+\usepackage{enumitem}
+\setlist{nosep}
+
+\usepackage[hidelinks]{hyperref}
+\usepackage{biblatex}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{subcaption}
+\usepackage{multirow}
+\addbibresource{citations.bib}
+
+\usepackage{booktabs}
+\usepackage{setspace}
+
+
+\title{Lab 3.3 - FMRI, Stat 214, Spring 2025}
+
+% submission must not contain any of your names
+% but feel free to make a version for yourself with your names on it
+\author{Anonymous}
+
+\begin{document}
+\maketitle
+
+\section{Introduction}
+
+This part is ignored for duplication with previous labs.
+
+\section{EDA}
+
+This part is ignored for duplication with previous labs.
+
+\section{Embeddings}
+
+The primary objective of this stage is to transform the raw textual narratives from the podcast stories into numerical feature vectors aligned with the temporal resolution of the fMRI data (i.e., one feature vector per Repetition Time, TR). This process largely mirrors the methodology employed in Lab 3.2, involving the extraction of word-level embeddings and subsequent temporal aggregation. However, a key distinction in this lab is the use of the pre-trained BERT model \cite{devlin2019bert} as the source of token representations. The model can be the original BERT model or a fine-tuned version, which will be described in the following sections.
+
+The overall pipeline for generating TR-level features is as follows:
+\begin{enumerate}
+    \item \textbf{Tokenization:} Each story's text is tokenized using the pre-trained tokenizer associated with BERT. This tokenizer segments words into subword units.
+    \item \textbf{Token Embedding Extraction with Sliding Window:} The pre-trained BERT has a maximum input sequence length of 512 tokens. Since the stories are often longer than this limit, a sliding window approach is implemented to process the entire token sequence of each story and obtain token-level embeddings (final hidden states) from the BERT model. This process is detailed in Section \ref{ssec:sliding_window}.
+    \item \textbf{Word-Level Aggregation:} For words represented by multiple subword tokens, their respective token embeddings (obtained from the sliding window output) are averaged to produce a single vector representation for each word. For words represented by a single token, their token embedding is used directly.
+    \item \textbf{TR-Level Aggregation with Lanczos Resampling:} The sequence of word embeddings, timed according to their occurrence in the story, is then resampled to match the fMRI TR timings. This is achieved using Lanczos interpolation, identical to the method in Lab 3.2, which computes a weighted average of word embeddings temporally proximal to each TR.
+\end{enumerate}
+
+The resulting TR-level feature vectors serve as the input for the ridge regression models predicting fMRI voxel activity. The use of a pre-trained BERT model provides rich, context-aware initial embeddings, while the sliding window mechanism allows us to leverage this model for sequences exceeding its native context length.
+
+\subsection{Sliding Window for Token Embedding Extraction}
+\label{ssec:sliding_window}
+
+The BERT model is restricted to processing input sequences of at most 512 tokens. To derive token embeddings for entire stories, which typically exceed this length, we implement a sliding window technique. This technique processes the full token sequence of a story in manageable, overlapping segments.
+
+The procedure is as follows:
+\begin{enumerate}
+    \item \textbf{Chunking:} The complete sequence of input token IDs for a story is divided into chunks of a fixed window size (set to 512 tokens, matching the BERT model's limit).
+    \item \textbf{Striding and Overlap:} These chunks are extracted with a specified stride (set to 256 tokens). A stride smaller than the window size ensures that consecutive windows overlap. This overlap is beneficial as tokens appearing near the boundaries of one chunk will also appear in more central, and thus potentially better contextualized, positions in adjacent chunks.
+    \item \textbf{BERT Processing:} Each chunk of tokens, along with its corresponding attention mask segment, is passed independently through the pre-trained BERT. The model outputs the final hidden states (embeddings) for every token within that chunk.
+    \item \textbf{Aggregation of Token Embeddings:} Since a single token from the original long sequence might appear in multiple overlapping windows, its representation is computed by averaging the hidden states obtained for that token from all the chunks in which it was processed. This is achieved by summing the embedding vectors for each token position across all chunks covering it and then dividing by the number of times that position was included in a chunk.
+\end{enumerate}
+The result of this sliding window process is a sequence of token embeddings with the same length as the original tokenized story, where each token embedding \( \mathbf{e}_i \in \mathbb{R}^{768} \) has been informed by a local context of up to 512 tokens. These aggregated token embeddings are then used for the word-level aggregation, and finally for the TR-level aggregation.
+
+\subsection{Differentiability of the Embedding Process}
+The embedding process described above is fully differentiable, meaning that the gradients can be backpropagated through the entire pipeline. This allows for the possibility of fine-tuning the BERT, enabling it to adapt to the fMRI data and the language processing tasks at hand. By allowing gradients to flow through the token embedding, sliding window, and aggregation steps, we can optimize the entire embedding process jointly with pretrained BERT.
+
+\section{Modeling - Pre-Trained Embeddings}
+
+\subsection{Modeling Approach}
+We create a predictive model to predict fMRI levels for each voxel using the pre-trained embeddings we have generated. Specifically, we fit a ridge regression model. This modeling approach contains the parameter alpha, which controls the penalty term on the model's weights as L2 (squared) loss.
+
+We start by fitting a regression model for Subject 2, for each different embedding - Bag of Words, GloVe, and Word2Vec. Using the cross-validation strategy described in the next section, we find the best alpha hyperparameter value for regularization.
+
+\subsection{Model Evaluation Strategy}
+
+We utilize a standard k-fold cross-validation strategy to develop our predictive models. The split is done at a story level instead of a TR level to mimic the real-world scenario where the model is trained on a set of stories and then evaluated on unseen stories. 60\% of the stories are used for training and validation, and the remaining are reserved for testing and remain untouched until the final evaluation.
+
+For each fold, the bag-of-words is retrained on the training data to avoid data leakage, while the pre-trained embeddings are applied before the data split as they are fixed and independent of the training data.
+
+The metric we use to evaluate the model performance is the correlation coefficient (CC) between the predicted and actual fMRI signals, which is a standard metric in the context of fMRI signals. We do this per voxel, giving us a voxel-wise CC. This is the metric that our model is trained to optimize for.
+
+This strategy is designed to mimic the real-world scenario with the best efforts to avoid data leakage and measure the model's generalization performance.
+
+\subsection{Results}
+
+Our cross-validation results for hyperparameter tuning are shown in Tables \ref{tab:word2vec_cv}, \ref{tab:glove_cv}, and \ref{tab:bow_cv} for the models trained with the Word2Vec, GloVe, and Bag of Words embeddings, respectively. These are performance metrics on the validation set.
+
+
+\begin{table}[ht]
+\centering
+\caption{Performance metrics for Word2Vec at different values of \texttt{alpha}. Best alpha: 1000 (Mean CV CC = 0.0057).}
+\label{tab:word2vec_cv}
+\begin{tabular}{rrrrr}
+\toprule
+\textbf{Alpha} & \textbf{Mean CC} & \textbf{Median CC} & \textbf{Top1 CC} & \textbf{Top5 CC} \\
+\midrule
+0.1    & 0.0035 & 0.0032 & 0.0462 & 0.0325 \\
+1      & 0.0036 & 0.0032 & 0.0462 & 0.0325 \\
+10     & 0.0036 & 0.0032 & 0.0463 & 0.0325 \\
+100    & 0.0039 & 0.0035 & 0.0478 & 0.0330 \\
+1000   & 0.0057 & 0.0051 & 0.0518 & 0.0364 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[ht]
+\centering
+\caption{Performance metrics for GloVe at different values of \texttt{alpha}. Best alpha: 1000 (Mean CV CC = 0.0067).}
+\label{tab:glove_cv}
+\begin{tabular}{rrrrr}
+\toprule
+\textbf{Alpha} & \textbf{Mean CC} & \textbf{Median CC} & \textbf{Top1 CC} & \textbf{Top5 CC} \\
+\midrule
+0.1    & 0.0048 & 0.0044 & 0.0474 & 0.0337 \\
+1      & 0.0048 & 0.0044 & 0.0474 & 0.0337 \\
+10     & 0.0058 & 0.0046 & 0.0479 & 0.0341 \\
+100    & 0.0055 & 0.0051 & 0.0496 & 0.0352 \\
+1000   & 0.0067 & 0.0061 & 0.0535 & 0.0377 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[ht]
+\centering
+\caption{Performance metrics for BoW at different values of \texttt{alpha}. Best alpha: 1000 (Mean CV CC = 0.0230).}
+\label{tab:bow_cv}
+\begin{tabular}{rrrrr}
+\toprule
+\textbf{Alpha} & \textbf{Mean CC} & \textbf{Median CC} & \textbf{Top1 CC} & \textbf{Top5 CC} \\
+\midrule
+0.1    & 0.0063 & 0.0062 & 0.0451 & 0.0338 \\
+1      & 0.0084 & 0.0082 & 0.0486 & 0.0368 \\
+10     & 0.0098 & 0.0095 & 0.0514 & 0.0392 \\
+100    & 0.0141 & 0.0135 & 0.0614 & 0.0476 \\
+1000   & 0.0230 & 0.0213 & 0.0851 & 0.0676 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+
+
+From this cross-validation process, the best model ended up being the Bag of Words model which used an alpha of 1000. It had a mean test CC of 0.0009, median CC of 0.0009, Top 1 percentile CC of 0.0311, and Top 5 Percentile CC of 0.0215. Overall, the CC is low (our model has a limited ability to predict fMRI levels well), and slightly higher than a random guessing.
+
+
+
+\subsection{Detailed Evaluation \& Analysis}
+For the model with the best embedding, which was Bag of Words, we performed a more detailed evaluation. We examine the distribution of test CC across voxels. We generate a list of CCs (one for each voxel), then visualize see how the CC is distributed across voxels. We are looking to see how differently the model performs on some voxels in comparison with others if they all have similar performance, or if there is a skew/outlier voxels, etc. Figure \ref{fig:cc_dist_voxels_subject_2} describes the distribution of CC across voxels. We can see that the distribution is relatively symmetric, with no major skew. Numerically, the distribution of CC is centered around 0.0009, with a 25th percentile above -0.01 and a 75th percentile at approximately 0.01. An important note is that there are numerous outlier voxels on either side (based on the 1.5*IQR outlier threshold), which suggests that the spread of CC across voxels is relatively large. The positive outliers are stronger/slightly further from the center than the negative outliers.
+
+So, this model does not perform the same across all voxels. Scientifically, this implies that prediction in different voxels of the brain has varying levels of difficulty. This could stem from that some brain areas (voxels) are irreverent from language processing, or at least language processing in listening to these stories, leading to noise that cannot be predicted with the story text, while some others actively respond to the story. However, more domain knowledge is required to justify the hypothesis.
+
+We want to have a reasonable interpretation criterion for interpreting voxels according to PCS. We want to make sure that the predictions are meaningfully better than by chance. One option is to only select voxels in the top \(x\) percentile of the observed distribution of CCs (i.e. for \(x=5\) for the 5th percentile). The reason to select the top voxels is that we know they respond to the stories actively, while others could be just random noise, as stated before. In terms of stability, we would ideally want to be able to predict voxels well across different stories, subjects, etc. We could check this by examining each voxel's CC across model performance for different stories, or different models for different subjects. Lastly, we want the full prediction process to be reproducible and computed reliably. These conditions align with the three main parts of PCS.
+
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.5\linewidth]{figs/cc_dist_voxels_subject_2.png}
+    \caption{Distribution of CC across voxels for Subject 2 using Bag of Words embeddings.}
+    \label{fig:cc_dist_voxels_subject_2}
+\end{figure}
+
+
+\subsection{Stability Analysis}
+We conduct a stability analysis by examining performance across different subjects. In this case, we compare Subject 2, which has been detailed so far, with another model trained on Subject 3. We train and test a model on Subject 3 using the same stories as Subject 2. We can then compare the distributions of CCs to see how stable the process is across different subjects.
+
+Our final Subject 3 model uses the Bag of Words embedding and an alpha hyperparameter of 1000 for Ridge. After the training, the final test set performance for Subject 3 was a mean CC of 0.0017, median CC of 0.0014, top 1 percentile CC of 0.0320, and a top 5 percentile CC of 0.0213. This is shown in Table \ref{tab:subject_performance}. In comparison with Subject 2, we note that the top 1 percentile and top 5 percentile CCs are very similar, which suggests stable results. The mean and median CC are better for Subject 3, though not by a large margin that would suggest high instability.
+
+\begin{table}[ht]
+  \centering
+  \caption{Test Performance Metrics for Subject 2 and Subject 3}
+  \label{tab:subject_performance}
+  \begin{tabular}{lcccc}
+    \hline
+    \textbf{Subject} & \textbf{Mean Test CC} & \textbf{Median Test CC} & \textbf{Top 1 Percentile CC} & \textbf{Top 5 Percentile CC} \\
+    \hline
+    Subject 2        & 0.0009                & 0.0009                 & 0.0311                     & 0.0215                      \\
+    Subject 3        & 0.0017                & 0.0014                 & 0.0320                     & 0.0213                      \\
+    \hline
+  \end{tabular}
+\end{table}
+
+We also visualize the distribution of CC across voxels to have a deeper understanding and comparison with Subject 2. This is shown in Figure \ref{fig:cc_dist_voxels_subject_3}. Visually, the distributions of CC across voxels look very similar between Subject 2 and Subject 3. The medians and quartiles, and outliers also show no major differences. This suggests a generally stable result.
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.5\linewidth]{figs/cc_dist_voxels_subject_3.png}
+    \caption{Distribution of CC across voxels for Subject 3 using Bag of Words embeddings.}
+    \label{fig:cc_dist_voxels_subject_3}
+\end{figure}
+
+
+\section{Modeling - Encoder Embedding}
+
+In this section, we now fit a linear model using the embeddings generated from the BERT-style encoder, as opposed to the pretrained embeddings. Doing so will allow us to examine if using an encoder shows potential for better predictions than pretrained embeddings, and how they differ. We follow a similar cross validation process, testing values across the 0.1 - 1000 range for the Ridge hyperparameter alpha.
+
+\subsection{Encoder Embedding Model - Hyperparameter Selection}
+We utilized the same cross-validation strategy as in the previous section. The hyperparameter training results for selecting the alpha value are shown in Table \ref{tab:encoder_cv}. Based on the CC scores, we selected alpha=1000 as the best value.
+
+\begin{table}[ht]
+\centering
+\caption{Performance metrics for encoder embeddings at different values of $\alpha$. Best alpha: 1000 (Mean CV CC = $-0.0052$).}
+\label{tab:encoder_cv}
+\begin{tabular}{rrrrrr}
+\toprule
+\textbf{Alpha} & \textbf{Mean CC} & \textbf{Median CC} & \textbf{Top1 CC} & \textbf{Top5 CC} & \textbf{Top10 CC} \\
+\midrule
+0.1   & -0.0055 & -0.0060 & 0.0382 & 0.0233 & \multicolumn{1}{c}{--} \\
+1     & -0.0055 & -0.0060 & 0.0382 & 0.0233 & \multicolumn{1}{c}{--} \\
+10    & -0.0056 & -0.0060 & 0.0382 & 0.0233 & \multicolumn{1}{c}{--} \\
+100   & -0.0052 & -0.0058 & 0.0393 & 0.0240 & \multicolumn{1}{c}{--} \\
+1000  & -0.0052 & -0.0058 & 0.0393 & 0.0240 & \multicolumn{1}{c}{--} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Encoder Embedding Model - Results}
+
+On the test set, the best model for the encoder embedding (with alpha=1000) reached a mean CC of 0.0060 for Subject 2 and a mean CC of 0.0114. Interestingly, for the encoder embeddings, we see not only significantly greater performance overall but also a larger difference in magnitude between the CC of Subject 2 and Subject 3, which will be examined in further depth. These results are shown in Table \ref{tab:cc_pretrained_vs_encoder_comparison}.
+
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.5\linewidth]{figs/encoder_subj2_cc_dist.png}
+    \caption{Distribution of CC across voxels for Subject 2 using Encoder embeddings.}
+    \label{fig:cc_dist_encoder_subject_2}
+\end{figure}
+
+\subsection{Encoder Embedding Model - Detailed Evaluation \& Analysis}
+We examine the distribution of test CC for the encoder embedding Ridge model across voxels. Figure \ref{fig:cc_dist_encoder_subject_2} describes the distribution of CC across voxels for Subject 2. We can see that the distribution is somewhat symmetric, with a slight upward skew. Numerically, the distribution of CC is centered around 0.007, with a 25th percentile around -0.01 and a 75th percentile at approximately 0.04. An important note is that there are numerous outlier voxels on either side (based on the 1.5*IQR outlier threshold), which suggests that the spread of CC across voxels is relatively large. The positive outliers are more numerous and stronger/further from the center than the negative outliers, reflecting a slight upward skew. One interesting note is that this distribution of CC is generally shifted more upward than the pre-trained embedding (i.e., Bag of Words) model, and has more positive outliers.
+
+So, this model does not perform the same across all voxels, just as we saw with the model using pre-trained embeddings. Scientifically, this implies that prediction in different voxels of the brain has varying levels of difficulty. This could stem from that some brain areas (voxels) are irrelevant to language processing, or at least language processing in listening to these stories, leading to noise that cannot be predicted with the story text, while some others actively respond to the story. To investigate this further, more domain knowledge would be useful.
+
+As stated earlier, we want to have a reasonable interpretation criterion for interpreting voxels according to PCS. We want to make sure that the predictions are meaningfully better than by chance. One option is to only select voxels in the top \(x\) percentile of the observed distribution of CCs (i.e., for \(x=5\) for the 5th percentile). The reason to select the top voxels is that we know they respond to the stories actively, while others could be just random noise, as stated before. In terms of stability, we would ideally want to be able to predict voxels well across different stories, subjects, etc. We could check this by examining each voxel's CC across model performance for different stories, or different models for different subjects. Lastly, we want the full prediction process to be reproducible and computed reliably. These conditions align with the three main parts of PCS.
+
+
+\subsection{Pre-Trained vs. Encoder Embeddings Comparison}
+
+We compare the results of the encoder embedding against the pre-trained embeddings by examining the CC of the encoder model and the Bag of Words model (which was the best pre-trained model). We see that the encoder embeddings are able to reach a higher CC. This is true across all thresholds of CC, including mean, median, Top 1\%, and Top 5\% CC. In particular, the top performance of voxels (for Top 1\% and Top 5\% are closer) is closer, while the mean and median CCs are much higher for the model using encoder embeddings. This can mean that the encoder embeddings generally provide better performance throughout more voxels, whereas the pre-trained embeddings only provide comparable performance at their best voxels. As mentioned, the distribution of CC is generally shifted more upward for the encoder embedding than the pre-trained embedding (i.e., Bag of Words) model, and has more positive outliers. This is shown when comparing the boxplots of the CC distribution across voxels in Figures \ref{fig:cc_dist_voxels_subject_2} and \ref{fig:cc_dist_encoder_subject_2}.
+
+In summary, different embedding methods do not perform equally well across the voxels. The encoder embeddings tend to have better performance across more voxels, whereas the pre-trained embeddings tend to have far worse performance for most voxels. However, the pre-trained embeddings still provide comparable performance to the encoder embeddings for the top-performing voxels for both models.
+
+
+\begin{table}[ht]
+\centering
+\caption{Comparison - Test Performance Metrics for Bag-of-Words vs. Pre-Trained Embeddings}
+\label{tab:cc_pretrained_vs_encoder_comparison}
+\begin{tabular}{llrrrr}
+\toprule
+\textbf{Embedding}   & \textbf{Subject} & \textbf{Mean CC} & \textbf{Median CC} & \textbf{Top 1 \% CC} & \textbf{Top 5 \% CC} \\
+\midrule
+Pre-Trained (Bag-of-Words) & 2 & 0.0009 & 0.0009 & 0.0311 & 0.0215 \\
+             & 3 & 0.0017 & 0.0014 & 0.0320 & 0.0213 \\
+\addlinespace
+Encoder      & 2 & 0.0060 & 0.0053 & 0.0416 & 0.0290 \\
+             & 3 & 0.0114 & 0.0093 & 0.0681 & 0.0426 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+\subsection{Encoder Embedding Model - Stability Analysis}
+We conduct a stability analysis for the encoder embedding model by examining performance across different subjects. In this case, we compare Subject 2, which has been discussed so far, with another model trained on Subject 3. We train and test a model on Subject 3 using the same stories as Subject 2. We can then compare the distributions of CCs to see how stable the process is across different subjects.
+
+Our final Subject 3 model uses an alpha hyperparameter of 1000 for Ridge. After the training, the final test set performance for Subject 3 was a mean CC of 0.0114, median CC of 0.0093, top 1 percentile CC of 0.0681, and a top 5 percentile CC of 0.0426. This is shown in Table \ref{tab:cc_pretrained_vs_encoder_comparison}. In comparison with Subject 2, the median and median CCs are significantly better for Subject 3, as they are almost double that of Subject 2. The top 1 percentile and top 5 percentiles are closer, though still show a noticeable gap.
+
+We also visualize the distribution of CC across voxels to have a deeper understanding and comparison with Subject 2. This is shown in Figure \ref{fig:cc_dist_encoder_subj_3}. Visually, the distributions of CC across voxels look somewhat similar between Subject 2 and Subject 3, as the medians and quartiles are comparable. However, Subject 3 shows a much stronger right skew and has stronger and more numerous outliers in the higher CC value region. This suggests that Subject 3 has many better, higher-performing voxels. Overall, the differences suggest that there may be some moderate instability in the result of the encoder embedding model across subjects, so further stability testing could be useful.
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.5\linewidth]{figs/encoder_subj3_cc_dist.png}
+    \caption{Distribution of CC across voxels for Subject 3 using Encoder embeddings.}
+    \label{fig:cc_dist_encoder_subj_3}
+\end{figure}
+
+\section{Modeling - Pre-Trained BERT and LoRA}
+In this section, we fit predictive models using the pre-trained BERT, both with a regression head only and finetuning the entire BERT with LoRA. We will compare the performance of these models to the previous models using pre-trained embeddings and encoder embeddings.
+
+\subsection{Model Selection Criteria}
+
+The core objective of our modeling phase is to predict fMRI voxel activity using features derived from textual stimuli. To evaluate and select the best-performing models, we employ a strategy largely consistent with previous labs, using story-level splits and focusing on the model's ability to generalize to unseen data. The primary metric for this evaluation remains the performance (measured by CC) on a held-out validation set.
+
+A key departure from Lab 3.1 and 3.2 in our model selection process for this lab (Lab 3.3) is the shift from k-fold CV to a fixed train-validation-test split. Specifically, the available stories are divided into a training set (60\% of stories), a validation set (20\%), and a test set (20\%).
+
+The rationale for using a validation set instead of k-fold CV is twofold:
+\begin{enumerate}
+    \item \textbf{Computational Cost:} Fine-tuning BERT, even with LoRA, is expensive. Performing k-fold CV would multiply this already significant computational burden by a factor of $k$, making extensive hyperparameter tuning or model exploration prohibitively expensive.
+    \item \textbf{Early Stopping in Deep Learning:} A common and crucial practice in training deep learning models is early stopping. This technique involves monitoring the model's performance on a validation set and picking the model state that achieves the best performance on this set. Implementing a clear and consistent early stopping mechanism is more straightforward with a single, fixed validation set than within a k-fold CV framework because each fold in a CV may pick a different model state based on its own validation set performance.
+\end{enumerate}
+
+Therefore, for both modeling approaches in this section, model selection and hyperparameter tuning are guided by MSE loss on the fixed validation set. The model configuration that yields the lowest validation MSE for each subject is selected as the best-performing model for that subject. The final evaluation of these selected models is then performed on the reserved test set. This approach allows for practical model development while still providing a robust mechanism for generalization assessment and overfitting mitigation.
+
+\subsection{Regression Head with Pretrained BERT Embeddings}
+
+In this initial modeling phase, we utilize the embeddings generated from the pre-trained BERT as fixed features to predict fMRI voxel activity. The BERT model itself is not fine-tuned at this stage; only a linear regression head is trained on top of these static BERT embeddings. The process for obtaining these TR-level features from the stories was detailed in the previous sections. Each TR is thus represented by a 768-dimensional vector (the hidden size of BERT).
+
+For each subject, a separate linear regression model is trained to map these 768-dimensional TR-level feature vectors to the BOLD signal activity across all their respective voxels.
+
+Given the large number of features and target voxels, and consistent with common practices for training neural network components, we employ gradient descent to optimize the weights of these linear regression heads. This contrasts with the closed-form solution often used for traditional ridge regression when the dataset size allows. Instead of an explicit L2 penalty term in the loss function (as in standard ridge regression), we achieve regularization through weight decay in the optimizer.
+
+The training procedure for these regression heads is as follows:
+\begin{itemize}
+    \item \textbf{Optimizer:} AdamW \cite{loshchilov2017decoupled} is used, incorporating weight decay directly into the optimization step, acting as L2 regularization.
+    \item \textbf{Learning Rate:} A learning rate of $2 \times 10^{-3}$ was employed.
+    \item \textbf{Weight Decay:} To investigate the impact of regularization, we experimented with three different weight decay values: $10^{-1}$, $10^{-2}$, and $10^{-3}$.
+    \item \textbf{Loss Function:} MSE between the predicted and actual fMRI signals for each subject.
+    \item \textbf{Epochs and Early Stopping:} The models were trained for a maximum of 100 epochs. The state of the linear regression head that achieved the lowest MSE on the validation set was saved as the best model for each subject. This early stopping mechanism helps prevent overfitting.
+\end{itemize}
+
+The performance of the best models will be evaluated on the test set in the following sections.
+
+\subsection{LoRA Fine-tuning of BERT}
+
+To further adapt the pre-trained BERT model to our specific fMRI prediction task, we employ Low-Rank Adaptation (LoRA) \cite{hu2021lora}, a parameter-efficient fine-tuning technique. Instead of updating all the weights of the large BERT model, LoRA introduces small, trainable low-rank matrices into specific layers, significantly reducing the number of trainable parameters while often achieving performance comparable to full fine-tuning. The original weights of the BERT model remain frozen.
+
+The embedding extraction process remains unchanged from the previous section, where we used the pre-trained BERT model to generate TR-level features. The only difference is that we now propagate gradients through the embedding extraction pipeline and capture the gradients of the LoRA parameters. This is possible because the extraction pipeline is fully differentiable.
+
+The LoRA configuration and training procedure are as follows:
+\begin{itemize}
+    \item \textbf{LoRA Target Modules:} We applied LoRA to the query and value projection matrices within each attention layer of the BERT model. The key and feed-forward dense layers were not modified with LoRA adapters in this setup, aligning with the standard practice in LoRA finetuning.
+    \item \textbf{LoRA Rank (\(r\)):} We experimented with two LoRA ranks: \(r=4\) and \(r=8\). A lower rank results in fewer trainable parameters.
+    \item \textbf{LoRA Alpha (\(\alpha\)):} The LoRA scaling factor \(\alpha\) was set to \(2 \times r\), a common practice in LoRA.
+    \item \textbf{LoRA Dropout:} A dropout rate of \(0.1\) was applied to the LoRA layers.
+    \item \textbf{Bias Term for LoRA:} No bias term was added to the LoRA layers, nor was the bias term in the original BERT model modified.
+\end{itemize}
+
+For the regression heads (the linear layers mapping the 768-dimensional BERT output to voxel activities for each subject), we initialized them with the weights obtained from the best-performing "Regression Head" trained in the previous section, with a weight decay of \(10^{-1}\). This initialization strategy is intended to leverage the knowledge learned during the regression head training phase, providing a warm start for the classifiers, preventing the BERT's weights from being breaked by the regression head training.
+
+The joint optimization of LoRA parameters and the (initialized) regression heads followed this procedure:
+\begin{itemize}
+    \item \textbf{Optimizer:} AdamW \cite{loshchilov2017decoupled}.
+    \item \textbf{Learning Rate:} A base learning rate of $2 \times 10^{-3}$ was used, scaled linearly by the ratio of the current batch size (15) to a reference batch size of 75.
+    \item \textbf{Weight Decay:} A weight decay of $10^{-1}$ was applied to all trainable parameters.
+    \item \textbf{Training Data and Batching:} The model was trained on the designated training set (60\% of stories), processed in mini-batches of 15 stories. The order of stories was shuffled at the beginning of each epoch.
+    \item \textbf{Loss Function:} MSE between predicted and actual fMRI signals.
+    \item \textbf{Epochs and Early Stopping:} Training proceeded for a maximum of 100 epochs. For each subject, the LoRA adapter weights and the corresponding regression head weights that yielded the lowest MSE on the validation set were saved independently.
+\end{itemize}
+
+The performance of the best models will be evaluated on the test set in the following sections.
+
+\subsection{Model Comparison - Pre-trained vs Fine-tuned (LORA)}
+In this section, we compare the performance of the pre-trained BERT model vs the model that we finetune using LORA. The results for CC across voxels, split by various metrics like Mean, Median, Top 1\%, and Top 5\% CC, are highlighted in Table \ref{tab:cc_subject2_comparison_finetuned_vs_pretrained}. We consider these different metrics (as in prior labs) to have a more robust sense of how the models are performing across voxels, and whether certain models have more variance in their voxel performance.
+
+We can see that overall, fine-tuning does improve the performance of the model as expected. However, the improvement is very relatively small in magnitude. For subject 2, the Mean CC improves by around 0.002, which represents an approximately 10\% change. The upper echelons of voxels in terms of performance, meaning the Top 10\% and Top 5\% CC's, improve by a smaller relative change. Overall, we see a notable but small improvement performance across voxels, both throughout the mean/median and the best-performing voxels.
+
+These experiments are repeated for Subject 3 in Table \ref{tab:cc_subject3_comparison_finetuned_vs_pretrained}. We generally see the same takeaways, just with consistenly worse performances across both models and all metrics. This may indicate that it is harder to predict fMRI levels for Subject 3. Another note is that the improvement between pretrained and finetuned at the top-performing voxels for Subject 3 is relatively smaller than the improvement we see in Subject 2.
+
+
+\begin{table}[ht]
+\centering
+\caption{Voxel-wise test-set correlation (CC) for Subject 2: fine-tuned vs.\ pretrained model}
+\label{tab:cc_subject2_comparison_finetuned_vs_pretrained}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Model} & \textbf{Mean CC} & \textbf{Median CC} & \textbf{Top 1\% CC} & \textbf{Top 5\% CC} \\
+\midrule
+Pretrained & 0.018732 & 0.014398 & 0.103731 & 0.064962 \\
+Fine–tuned & 0.020627 & 0.015985 & 0.108326 & 0.069247 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+\begin{table}[h!]
+\centering
+\caption{Voxel-wise test-set correlation (CC) for Subject 3: fine-tuned vs. pretrained model}
+\label{tab:cc_subject3_comparison_finetuned_vs_pretrained}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Model} & \textbf{Mean CC} & \textbf{Median CC} & \textbf{Top 1\% CC} & \textbf{Top 5\% CC} \\
+\midrule
+Pretrained & 0.005317 & 0.005367 & 0.044171 & 0.030436 \\
+Fine–tuned & 0.005947 & 0.005888 & 0.045137 & 0.031242 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+
+Additionally, we wanted to explore in greater depth how performance looks across the distribution of voxels for each model. These can be compared through a histogram of the CC distribution across voxels, shown in Figures \ref{fig:cc_dist_pretrained_subj2} and \ref{fig:cc_dist_finetuned_subj2}. Through this, we can see that both the pretrained and finetuned model CC's follow roughly the same distribution in shape. The pretrained model, however, has a higher concentration of CC around the 0.01 region.
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.5\linewidth]{figs/cc_dist_pretrained_subj2.png}
+    \caption{Test CC Distribution for the Pre-trained Model [Subject 2].}
+    \label{fig:cc_dist_pretrained_subj2}
+\end{figure}
+
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.5\linewidth]{figs/cc_dist_finetuned_subj2.png}
+    \caption{Test CC Distribution for the Fine-tuned Model [Subject 2].}
+    \label{fig:cc_dist_finetuned_subj2}
+\end{figure}
+
+
+
+\subsection{Model Comparison - All Models}
+We now compare the performance of the fine-tuned model and pre-trained model with all models from parts 3.1 and 3.2. This includes the model with encoder embeddings, Word2Vec, GloVe, and Bag of Words. The results are shown in Table \ref{tab:cc_subject2_full}
+
+\begin{table}[ht]
+\centering
+\caption{Voxel-wise test-set correlation coefficients (CC) for \textbf{Subject 2}.}
+\label{tab:cc_subject2_full}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Model} &
+\textbf{Mean CC} &
+\textbf{Median CC} &
+\textbf{Top 1\% CC} &
+\textbf{Top 5\% CC} \\
+\midrule
+Finetuned  & 0.020627 & 0.015985 & 0.108326 & 0.069247 \\
+Pretrained & 0.018732 & 0.014398 & 0.103731 & 0.064962 \\
+Encoder    & 0.005989 & 0.005274 & 0.041602 & 0.029038 \\
+Word2Vec   & 0.005648 & 0.004466 & 0.050116 & 0.032150 \\
+GloVe      & 0.004951 & 0.004253 & 0.043254 & 0.029343 \\
+BoW        & 0.000904 & 0.000870 & 0.031131 & 0.021515 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+For the purpose of stability and completeness of our analysis, this comparison was repeated for Subject 3. These results are shown in Table \ref{tab:cc_subject3_full}.
+
+
+
+\begin{table}[ht]
+\centering
+\caption{Voxel-wise test-set correlation coefficients (CC) for \textbf{Subject 3}.}
+\label{tab:cc_subject3_full}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Model} &
+\textbf{Mean CC} &
+\textbf{Median CC} &
+\textbf{Top 1\% CC} &
+\textbf{Top 5\% CC} \\
+\midrule
+Finetuned  & 0.005947 & 0.005888 & 0.045137 & 0.031242 \\
+Pretrained & 0.005317 & 0.005367 & 0.044171 & 0.030436 \\
+Encoder    & 0.011400 & 0.009270 & 0.068056 & 0.042578 \\
+Word2Vec   & 0.008742 & 0.006996 & 0.062659 & 0.038738 \\
+GloVe      & 0.008662 & 0.006905 & 0.061016 & 0.038540 \\
+BoW        & 0.001653 & 0.001390 & 0.032009 & 0.021303 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+We also compare against the visual distributions of the previous models (in Labs 3.1 and 3.2) to understand the specific performance across voxels. We can see that the pretrained and finetuned models have a more skewed distribution than the previous models, which have a more centered distribution. In general, the previous models also exhibit lower performance than the pretrained and finetuned models, which have more parameters and are pretrained on a larger corpus. This is expected, as the pretrained and finetuned models are more complex and capable of capturing more complex patterns in natural language.
+
+However, for Subject 3, the performance is quite different. The Encoder-based model, Word2Vec, and GloVe end up having better performance than the finetuned and pretrained models. This could indicate some instability in the result between the two subjects. Additionally, it could indicate that simpler baselines work better for Subject 3 prediction.
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.5\linewidth]{figs/cc_dist_Word2Vec.png}
+    \caption{Test CC Distribution for the Word2Vec Model [Subject 2].}
+    \label{fig:cc_dist_Word2Vec}
+\end{figure}
+
+\begin{figure}[ht]
+    \centering
+    \includegraphics[width=0.5\linewidth]{figs/cc_dist_Encoder.png}
+    \caption{Test CC Distribution for the Encoder Model [Subject 2].}
+    \label{fig:cc_dist_Encoder}
+\end{figure}
+
+
+\section{Interpretation}
+
+In this section, we apply SHAP (SHapley Additive exPlanations) and LIME (Local Interpretable Model-agnostic Explanations) to interpret the fine-tuned BERT model's predictions by identifying the most influential words for two different test stories: \texttt{buck} and \texttt{lawsthatchokecreativity}. Annotated versions of each story, highlighting word-level importances, are included in Appendix \ref{sec:buck_text} and Appendix \ref{sec:laws_text}.
+
+\subsection{Voxel Selection}
+
+Although the fine-tuned model generates predictions for all $94{,}251$ voxels in Subject 2 and $95{,}556$ voxels in Subject 3, we limit our interpretability analysis to the voxels where the model performs well. This selective approach is crucial: methods like SHAP and LIME attempt to assign attribution based on a model's behavior, so they are only meaningful when the model's predictions are reliable. Interpreting poorly performing voxels would be misleading because feature attributions would reflect noise rather than a meaningful signal.
+
+To identify the most informative voxels, we rank them by the CC between predicted and actual fMRI responses across time points. We then select voxels whose performance exceeds the 99.5th percentile (i.e., the top 0.5\% of correlation scores). Table \ref{tab:voxel_select} shows the corresponding CC thresholds for each subject and story. From the eligible voxels, we randomly sample a subset for SHAP and LIME interpretation to keep the analysis computationally manageable.
+
+
+\begin{table}[ht]
+    \centering
+    \caption{Top 0.5\% CC Voxel Thresholds}
+    \begin{tabular}{r|r|r}
+        \toprule
+        \textbf{Story}                   &  \textbf{Subject 2} & \textbf{Subject 3}\\
+        \midrule
+        \texttt{buck}                    &  0.216              & 0.294\\
+        \hline
+        \texttt{lawsthatchokecreativity} &  0.159              & 0.206\\
+        \bottomrule
+    \end{tabular}
+    \label{tab:voxel_select}
+\end{table}
+
+\subsection{SHAP \& LIME Implementation}
+
+Both SHAP and LIME explain model predictions by perturbing the input features and measuring how those changes affect the output, attributing influence to each feature accordingly. In our case, the model takes BERT embeddings as input and outputs fMRI predictions, so we define a wrapper function around the model that returns predictions only for a subset of high-performing voxels. This allows SHAP and LIME to focus their explanations on the most informative regions of the brain.
+
+For SHAP, we use \texttt{KernelExplainer}, a model-agnostic method that estimates Shapley values by fitting a locally weighted linear model around each prediction. For LIME, we use \texttt{LimeTabularExplainer}, which similarly fits local linear models to approximate feature importances. Both methods require a background dataset to serve as a reference distribution for generating perturbed samples. To ensure consistency and interpretability, we use the BERT embeddings from several training set stories as the background.
+
+After applying SHAP and LIME, we obtain a three-dimensional array of explanation values with shape \texttt{(num\_chunks, embedding\_dim, num\_voxels)}. To summarize these into word-level importance scores for each voxel, we take the absolute value of the explanation values and then average across the embedding dimension. The result is a matrix of shape \texttt{(num\_chunks, num\_voxels)} that reflects the relative importance of each word chunk to each voxel’s predicted activation.
+
+\subsection{Test Story 1: \texttt{buck}}
+
+As shown in Figure \ref{fig:scatter_buck_1}, the word rankings produced by SHAP and LIME for \texttt{buck} are fairly consistent between Subject 2 and Subject 3, although the correlation is weaker than that observed for the raw attribution scores. This suggests that both SHAP- and LIME-based word importances are relatively stable across listeners to this story.
+
+
+\begin{figure}[ht]
+    \centering
+
+    \parbox{\textwidth}{\centering 
+        \fontsize{13pt}{13pt}\selectfont \textbf{Cross-Subject Consistency in Word Importance}  
+        
+        {\fontsize{11pt}{13pt}\selectfont Comparing SHAP and LIME scores and ranks between Subject 2 and Subject 3} 
+    }
+    
+    \begin{subfigure}[t]{0.22\textwidth}
+        \centering
+        \caption{SHAP Scores}
+        \includegraphics[width=\textwidth]{figs/scatter_buck_shap_raw.png}
+        \label{subfig:scatter_buck_shap_raw}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.22\textwidth}
+        \centering
+        \caption{SHAP Ranks}
+        \includegraphics[width=\textwidth]{figs/scatter_buck_shap_rank.png}
+        \label{subfig:scatter_buck_shap_rank}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.22\textwidth}
+        \centering
+        \caption{LIME Scores}
+        \includegraphics[width=\textwidth]{figs/scatter_buck_lime_raw.png}
+        \label{subfig:scatter_buck_lime_raw}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.22\textwidth}
+        \centering
+        \caption{LIME Ranks}
+        \includegraphics[width=\textwidth]{figs/scatter_buck_lime_rank.png}
+        \label{subfig:scatter_buck_lime_rank}
+    \end{subfigure}
+    \caption{Scatterplots comparing word-level SHAP (red) and LIME (blue) values between Subject 2 and Subject 3. Scores (left) show strong cross-subject agreement, while ranks (right) exhibit greater dispersion—indicating consistency in which words matter, but differences in their relative importance.}
+    \label{fig:scatter_buck_1}
+\end{figure}
+
+Interestingly, Figure \ref{fig:scatter_buck_2} indicates that the words most highly ranked by SHAP differ substantially from those most highly ranked by LIME. In fact, their word rankings are weakly negatively correlated, implying that SHAP and LIME emphasize different features of the input when assigning importance. This points to complementary but largely divergent interpretations of model behavior by the two methods and suggests instability.
+
+\begin{figure}[ht]
+    \centering
+
+    \parbox{\textwidth}{\centering 
+        \fontsize{13pt}{13pt}\selectfont \textbf{SHAP vs. LIME: Average Word Rank Comparison}  
+        
+        {\fontsize{11pt}{13pt}\selectfont Comparing average word ranks across Subject 2 and Subject 3} 
+    }
+  
+    \includegraphics[width=0.35\textwidth]{figs/scatter_buck_rank.png}
+    
+    \caption{The weak negative correlation $r = -0.35$ between SHAP ranks (x-axis) and LIME ranks (y-axis) suggests that the two methods often prioritize different sets of words, even when averaged across subjects.}
+    \label{fig:scatter_buck_2}
+\end{figure}
+
+
+In \texttt{buck}, SHAP tends to highlight:
+\begin{itemize}
+	\item \textbf{Emotional experiences} (e.g., "to eat from this spread", "no one had ever asked me what i want")
+	\item \textbf{Prison dynamics} (e.g., "prison", "walk the one gate after another", "hundred guys waiting", "[out] of prison they know you on parole")
+	\item \textbf{Identity markers} (e.g., "know this ink work this is prison ink", "now i speak a lot of different gangster languages", "understand blood i even speak a little")
+	\item \textbf{Transitional phrases} (e.g., "so", "because for the past ten years", "and leave out of here")
+\end{itemize}
+
+
+Meanwhile, LIME tends to highlight:
+\begin{itemize}
+	\item \textbf{Temporal markers} (e.g., "after twenty six years", "corridor for the last time", "through that last gate")
+	\item \textbf{Quantitative details} (e.g., "thirty seven eighty seven five report", "with two hundred dollars in it", "no more than eight feet away")
+	\item \textbf{Action sequences} (e.g., "they load us on a van", "i get to r and r", "washing dishes my wife says")
+\end{itemize}
+
+Curiously, words identified by both methods almost exclusively involve \textbf{interactions with the speaker's wife} (e.g., "gave her a quick kiss whispered in", "call out to my wife i said hey babe", "i could see her she was snapping pictures", "and he tells my wife wait").
+
+This pattern suggests that these two methods can provide complementary insights about which textual features drive fMRI responses: SHAP may better capture emotional and thematic elements, while LIME may be more effective at identifying sequentially important narrative details. For a more comprehensive list of words identified by each method, see Appendix \ref{sec:buck_text}.
+
+\begin{figure}[ht]
+    \centering
+
+    \parbox{\textwidth}{\centering 
+        \fontsize{13pt}{13pt}\selectfont \textbf{Voxelwise Consistency of SHAP and LIME Word Ranks}  
+        
+        {\fontsize{11pt}{13pt}\selectfont Distribution of word rankings across individual voxels and subject-score combinations} 
+    }
+    
+    \begin{subfigure}[t]{0.35\textwidth}
+        \centering
+        \caption{Voxelwise Rank Heatmap}
+        \includegraphics[width=\textwidth]{figs/heatmap_buck.png}
+        \label{subfig:heatmap_buck}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.35\textwidth}
+        \centering
+        \caption{Interquartile Range of Word Ranks}
+        \includegraphics[width=\textwidth]{figs/boxplot_buck.png}
+        \label{subfig:boxplot_buck}
+    \end{subfigure}
+    \caption{Word ranks assigned by individual voxels show a high degree of consistency within and across subjects. The heatmap (left) displays voxelwise rankings for 332 word chunks, revealing horizontal banding patterns that reflect agreement in word importance. The boxplot (right) summarizes the spread of these ranks within chunks. For the average word, the IQR spans only ${\sim}125$ ranks, suggesting relatively stable importance scores across voxels.}
+    \label{fig:buck_voxelwise}
+\end{figure}
+
+\newpage
+
+Regarding differences across voxels, Figure \ref{fig:buck_voxelwise} reveals visible horizontal banding in the heatmaps for both SHAP and LIME, indicating that word rankings are relatively consistent across voxels within and between subjects. The accompanying boxplot shows that SHAP produces slightly lower median IQRs for word ranks across voxels, suggesting less variability and lower voxel sensitivity for the average word. Conversely, LIME exhibits a tighter distribution of IQR values, indicating that while its average variability may be higher, the spread among the least consistently ranked words is smaller.
+
+
+\subsection{Test Story 2: \texttt{lawsthatchokecreativity}}
+
+As shown in Figure \ref{fig:scatter_laws_1}, the word rankings produced by SHAP and LIME for \texttt{lawsthatchokecreativity} are fairly consistent between Subject 2 and Subject 3, although the correlation is weaker than that observed for the raw attribution scores. This suggests that both SHAP- and LIME-based word importances are relatively stable across listeners to this story.
+
+
+\begin{figure}[ht]
+    \centering
+
+    \parbox{\textwidth}{\centering 
+        \fontsize{13pt}{13pt}\selectfont \textbf{Cross-Subject Consistency in Word Importance}  
+        
+        {\fontsize{11pt}{13pt}\selectfont Comparing SHAP and LIME scores and ranks between Subject 2 and Subject 3} 
+    }
+    
+    \begin{subfigure}[t]{0.22\textwidth}
+        \centering
+        \caption{SHAP Scores}
+        \includegraphics[width=\textwidth]{figs/scatter_laws_shap_raw.png}
+        \label{subfig:scatter_laws_shap_raw}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.22\textwidth}
+        \centering
+        \caption{SHAP Ranks}
+        \includegraphics[width=\textwidth]{figs/scatter_laws_shap_rank.png}
+        \label{subfig:scatter_laws_shap_rank}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.22\textwidth}
+        \centering
+        \caption{LIME Scores}
+        \includegraphics[width=\textwidth]{figs/scatter_laws_lime_raw.png}
+        \label{subfig:scatter_laws_lime_raw}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.22\textwidth}
+        \centering
+        \caption{LIME Ranks}
+        \includegraphics[width=\textwidth]{figs/scatter_laws_lime_rank.png}
+        \label{subfig:scatter_laws_lime_rank}
+    \end{subfigure}
+    \caption{Scatterplots comparing word-level SHAP (red) and LIME (blue) values between Subject 2 and Subject 3. Scores (left) show strong cross-subject agreement, while ranks (right) exhibit greater dispersion—indicating consistency in which words matter, but differences in their relative importance.}
+    \label{fig:scatter_laws_1}
+\end{figure}
+
+
+Interestingly, Figure \ref{fig:scatter_laws_2} indicates that the words most highly ranked by SHAP differ substantially from those most highly ranked by LIME. In fact, their word rankings are weakly negatively correlated, implying that SHAP and LIME emphasize different features of the input when assigning importance. This points to complementary but largely divergent interpretations of model behavior by the two methods.
+
+
+\begin{figure}[ht]
+    \centering
+
+    \parbox{\textwidth}{\centering 
+        \fontsize{13pt}{13pt}\selectfont \textbf{SHAP vs. LIME: Average Word Rank Comparison}  
+        
+        {\fontsize{11pt}{13pt}\selectfont Comparing average word ranks across Subject 2 and Subject 3} 
+    }
+  
+    \includegraphics[width=0.3\textwidth]{figs/scatter_laws_rank.png}
+    
+    \caption{The weak negative correlation $r = -0.12$ between SHAP ranks (x-axis) and LIME ranks (y-axis) suggests that the two methods often prioritize different sets of words, even when averaged across subjects.}
+    \label{fig:scatter_laws_2}
+\end{figure}
+
+\newpage
+
+
+In \texttt{lawsthatchokecreativity}, SHAP tends to highlight:
+\begin{itemize}
+    \item \textbf{Concrete entities and specific references} (e.g., "john philip sousa", "united states capitol", "four hundred and forty eight percent", "supreme court considered")
+    \item \textbf{Technical legal terminology} (e.g., "will be eliminated by a process of evolution", "copyright law at its core regulates", "judgement of fair use")
+    \item \textbf{Action-oriented phrases} (e.g., "singing the songs", "take sounds and images", "traveled to this place")
+\end{itemize}
+
+Meanwhile, LIME tends to highlight:
+\begin{itemize}
+    \item \textbf{Abstract concepts} (e.g., "a culture which is top down owned", "it is a literacy", "weird time it's kind of age of prohibitions")
+    \item \textbf{Temporal and spatial references} (e.g., "across the country well in nineteen forty five", "at that time this legal", "and in nineteen forty one")
+    \item \textbf{Cultural commentary} (e.g., "this is a picture of culture", "celebrating amateur culture", "it is how our kids think")
+    \item \textbf{Technology-related expressions} (e.g., "with access to a fifteen hundred dollar computer", "instinct the technology produces", "can't stop our kids from using")
+\end{itemize}
+
+
+\begin{figure}[ht]
+    \centering
+
+    \parbox{\textwidth}{\centering 
+        \fontsize{13pt}{13pt}\selectfont \textbf{Voxelwise Consistency of SHAP and LIME Word Ranks}  
+        
+        {\fontsize{11pt}{13pt}\selectfont Distribution of word rankings across individual voxels and subject-score combination} 
+    }
+    
+    \begin{subfigure}[t]{0.35\textwidth}
+        \centering
+        \caption{Voxelwise Rank Heatmap}
+        \includegraphics[width=\textwidth]{figs/heatmap_laws.png}
+        \label{subfig:heatmap_laws}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.35\textwidth}
+        \centering
+        \caption{Interquartile Range of Word Ranks}
+        \includegraphics[width=\textwidth]{figs/boxplot_laws.png}
+        \label{subfig:boxplot_laws}
+    \end{subfigure}
+    \caption{Word ranks assigned by individual voxels show a high degree of consistency within and across subjects. The heatmap (left) displays voxelwise rankings for 434 word chunks, revealing horizontal banding patterns that reflect agreement in word importance. The boxplot (right) summarizes the spread of these ranks within chunks. For the average word, the IQR spans only ${\sim}180$ ranks, suggesting relatively stable importance scores across voxels.}
+    \label{fig:laws_voxelwise}
+\end{figure}
+
+\newpage
+
+However, words identified by both methods include:
+\begin{itemize}
+    \item \textbf{Key thesis statements} (e.g., "i'm gonna tell you three stories", "now so instead what we need is")
+    \item \textbf{Narrative transitions} (e.g., "and that's where the story of", "extremism on the other a fact we should have many many")
+    \item \textbf{Opinion indicators} (e.g., "i think much more important much", "to fight for i as any good")
+\end{itemize}
+
+This pattern suggests that fMRI responses may be driven by both specific semantic content (captured by SHAP) and broader narrative structure (captured by LIME), reflecting the multi-level processing that occurs in the brain during language comprehension. For a more comprehensive list of words identified by each method, see Appendix \ref{sec:laws_text}.
+
+Regarding differences across voxels, Figure \ref{fig:laws_voxelwise} reveals visible horizontal banding in the heatmaps for both SHAP and LIME, indicating that word rankings are relatively consistent across voxels within and between subjects. The accompanying boxplot shows that SHAP produces slightly lower median IQRs for word ranks across voxels, suggesting less variability and lower voxel sensitivity for the average word. Conversely, LIME exhibits a tighter distribution of IQR values, indicating that while its average variability may be higher, the spread among the least consistently ranked words is smaller.
+
+
+
+\section{Conclusion}
+
+This lab demonstrated the efficacy of leveraging pre-trained language models for predicting fMRI responses to narrative stimuli. Our experiments focused on utilizing BERT, first with static embeddings and then through parameter-efficient fine-tuning using LoRA.
+
+The results indicate that embeddings from the pre-trained BERT model significantly outperform those from earlier labs (custom encoders or simpler static embeddings like Bag-of-Words) for Subject 2, and show competitive results for Subject 3. This highlights the benefit of the rich contextual representations learned by larger models. Furthermore, fine-tuning these BERT embeddings with LoRA provided an additional, albeit modest, improvement in predictive accuracy across both subjects, underscoring the value of task-specific adaptation even with limited trainable parameters. The choice of LoRA rank (\(r=8\)) and initializing regression heads from prior experiments proved beneficial.
+
+Interpretability analysis using SHAP and LIME on the fine-tuned LoRA-BERT model identified words relevant to the narrative content that influenced predictions for well-modeled voxels. While SHAP and LIME offered somewhat divergent perspectives—SHAP often emphasizing thematic content and LIME highlighting structural or specific details—their combined insights suggest that the model attends to various meaningful linguistic features. Word importance showed reasonable consistency across subjects and voxels, indicating some shared neural processing patterns captured by the model.
+
+In summary, this work confirms that pre-trained transformers, further refined with techniques like LoRA, provide a robust framework for modeling neural language processing. They offer improved predictive power and, through interpretability methods, can shed light on the linguistic features driving brain activity.
+
+\newpage
+
+
+\printbibliography
+
+\appendix
+\section{Academic honesty}
+\subsection{Statement}
+We affirm that the work in this report is entirely my own. We have not copied from any unauthorized sources, and all contributions from classmates, external sources, or tools are acknowledged. Academic research honesty is necessary because it ensures fairness, builds trust in scholarly work, and reflects personal integrity. Misrepresenting work undermines academic standards and disrespects the time and effort of peers and educators. Maintaining honesty in research fosters a learning environment where collaboration and progress can thrive authentically.
+
+\subsection{LLM Usage}
+
+We used ChatGPT to assist in clarifying concepts, creating visualizations, checking grammar, and improving the structure of our explanations. No content of the report or code was generated by the LLM without our review, editing, and refinement. We ensured that all content was written and understood by us, and the LLM was used as a tool to enhance our work rather than replace our understanding, we take full responsibility for all content in the report.
+
+\newpage
+
+\section{\texttt{buck} Full Text} \label{sec:buck_text}
+
+Words discovered by SHAP in \textcolor{Maroon}{red}, LIME in \textcolor{RoyalBlue}{blue}, or both in \textbf{bold}. Threshold based on $75^{th}$ percentile word ranks.
+
+\vspace{1em}
+\noindent
+\begin{minipage}{\textwidth}
+\scriptsize % \small, \footnotesize, \scriptsize, etc.
+\begin{spacing}{1.0} % line spacing
+\input{stories/buck_styled}
+\end{spacing}
+\end{minipage}
+\vspace{1em}
+
+\newpage
+
+\section{\texttt{lawsthatchokecreativity} Full Text} \label{sec:laws_text}
+
+Words discovered by SHAP in \textcolor{Maroon}{red}, LIME in \textcolor{RoyalBlue}{blue}, or both in \textbf{bold}. Threshold based on $75^{th}$ percentile word ranks.
+
+\vspace{1em}
+\noindent
+\begin{minipage}{\textwidth}
+\ssmall % \small, \footnotesize, \scriptsize, etc.
+\begin{spacing}{1.0} % line spacing
+\input{stories/laws_styled}
+\end{spacing}
+\end{minipage}
+\vspace{1em}
+
+\end{document}
+
+
+
+
+
+
+

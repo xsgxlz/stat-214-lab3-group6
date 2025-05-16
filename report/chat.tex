@@ -1,0 +1,133 @@
+I'll analyze the words identified as influential by SHAP and LIME in your story text and explore what the overlaps and differences suggest about each method's approach to attribution.
+
+## Comparing SHAP and LIME Word Attributions
+
+### Overlap (Words Identified by Both Methods)
+The words identified by both methods (bolded text) are relatively few but significant:
+- "i could see her she was snapping pictures"
+- "gave her a quick kiss whispered in"
+- "and he tells my wife wait"
+- "yard me and this buck woulda had issues"
+- "call out to my wife i said hey babe"
+
+These overlaps appear to focus on:
+1. Visually distinctive moments (seeing the wife taking pictures)
+2. Physical interactions (giving a kiss)
+3. Direct speech and interactions between characters
+4. Moments of potential conflict or tension (issues with the buck)
+5. Communication events (calling out to the wife)
+
+### SHAP-Only Attributions (Red Text)
+SHAP uniquely identifies many words related to:
+1. **Personal experiences and emotions**: "so," "to eat from this spread," "no one had ever asked me what do i want"
+2. **Institutional references**: "prison," "walk the one gate after another," "hundred guys waiting," "just as one neighbor"
+3. **Transition words/phrases**: "so," "because for the past ten years," "and leave out of here"
+4. **Location identifiers**: "berkeley," "up throw it over my shoulder"
+5. **Personal identity markers**: "know this ink work this is prison ink," "understand blood i even speak a little"
+
+### LIME-Only Attributions (Blue Text)
+LIME uniquely identifies words related to:
+1. **Temporal markers**: "after twenty six years," "corridor for the last time," "through that last gate"
+2. **Quantitative details**: "thirty seven eighty seven five report," "with two hundred dollars in it"
+3. **Action sequences**: "they load us on a van," "i get to r and r," "washing dishes my wife says"
+4. **Objects and concrete details**: "r and r and that's receiving," "a seven eleven," "a smooth orange a navel orange"
+5. **Comparative observations**: "is some grown folks' shit i thought," "no more than eight feet away"
+
+## Analysis of Differences Between Methods
+
+1. **Contextual Focus vs. Local Features**:
+   - SHAP seems more sensitive to words that provide emotional context and personal meaning (prison experiences, transitions, identity)
+   - LIME appears to focus more on concrete details, actions, and temporal markers that drive the narrative forward
+
+2. **Structural vs. Sequential Importance**:
+   - SHAP identifies words that form the emotional and psychological structure of the narrative
+   - LIME highlights words important to the sequential flow and specific details of events
+
+3. **Global vs. Local Perspective**:
+   - SHAP's attributions suggest it takes a more global view of the narrative, identifying words that contribute to themes and emotional states
+   - LIME's attributions suggest a more localized focus on specific narrative elements and transitions
+
+4. **Long-term vs. Short-term Relevance**:
+   - SHAP appears to identify words with longer-term significance to the overall story arc
+   - LIME seems to prioritize words with immediate relevance to specific scenes or moments
+
+5. **Implicit vs. Explicit Content**:
+   - SHAP tends to highlight words that carry implicit meaning or emotional weight
+   - LIME tends to focus on words with more explicit, concrete information
+
+## What This Suggests About Attribution Methods
+
+These differences suggest fundamentally different approaches to attribution:
+
+1. **SHAP** appears to be more holistic, identifying words that contribute to the overall meaning and emotional content of the narrative. It seems to capture words that have higher semantic importance rather than just sequential importance.
+
+2. **LIME** seems to be more linear and detail-oriented, focusing on words that mark specific events, transitions, and concrete details. It appears to be more sensitive to the narrative structure and progression.
+
+3. **The overlapping words** (identified by both methods) represent moments of high significance in both semantic and narrative terms - typically representing pivotal interactions or moments of high emotional or visual salience.
+
+This analysis shows how these two explanation methods can provide complementary insights about which textual features drive model predictions - with SHAP potentially better at capturing emotional and thematic elements, while LIME may excel at identifying sequentially important narrative details.
+
+
+
+
+# Rawi "buck" draft
+
+
+As shown in Figures 11--13, SHAP and LIME offer complementary perspectives on word importance across subjects and voxels, with notable differences in rank stability and regional sensitivity:
+
+\begin{itemize}
+    \item \textbf{Cross-subject consistency (Figure 11):}
+    \begin{itemize}
+        \item SHAP and LIME raw scores show relatively strong consistency across subjects.
+        \item However, both methods display greater variability in word ranks, particularly LIME, which shows more dispersed scatter.
+        \item This suggests that while both methods agree on which words generally matter in score, LIME's rank ordering is less stable across subjects.
+    \end{itemize}
+
+    \item \textbf{Divergence in prioritization (Figure 12):}
+    \begin{itemize}
+        \item A weak negative correlation ($r = -0.35$) between SHAP and LIME average ranks indicates that the two methods often highlight different words.
+        \item This reinforces their complementary yet divergent interpretations of model behavior.
+    \end{itemize}
+
+    \item \textbf{Voxel-level consistency (Figure 13):}
+    \begin{itemize}
+        \item Both methods show visible horizontal banding in the heatmaps, suggesting word rankings are somewhat consistent across voxels within each subject.
+        \item The boxplot reveals that SHAP has higher interquartile ranges across voxels, indicating greater rank variability and voxel sensitivity.
+        \item LIME shows tighter, more stable rankings across voxels and chunks.
+    \end{itemize}
+
+    \item \textbf{Summary:} 
+    \begin{itemize}
+        \item LIME provides more spatially stable word importance estimates across brain regions.
+        \item SHAP captures more voxel-specific variation, offering sensitivity to localized brain activity but at the cost of stability.
+    \end{itemize}
+\end{itemize}
+
+In terms of the text-level interpretation, SHAP and LIME prioritize different aspects of the narrative:
+
+\begin{itemize}
+    \item \textbf{SHAP tends to identify:}
+    \begin{itemize}
+        \item Emotionally intense, conflict-driven, or situationally unique moments (e.g., ``hundred,'' ``tripping,'' ``cop,'' ``gun,'' ``paparazzi'').
+        \item High-stakes events and pivotal narrative twists, showing sensitivity to dramatic, rare, or emotionally charged details.
+    \end{itemize}
+
+    \item \textbf{LIME tends to identify:}
+    \begin{itemize}
+        \item Procedural, action-oriented, and routine language (e.g., ``shopping,'' ``food,'' ``store,'' ``wife,'' ``house'').
+        \item Words that sustain the flow of events and social interactions, emphasizing the narrative's structural and relational elements.
+    \end{itemize}
+
+    \item \textbf{Both methods identify:}
+    \begin{itemize}
+        \item Core thematic anchors (e.g., ``years,''  ``wife,''  ``money,'' ``van,'' ``neighbor,'' ``gate'') that structure the overall narrative.
+        \item The fact that "wife" is identified by both SHAP and LIME suggests it serves as a central narrative anchor, carrying both procedural importance and emotional or relational significance, making it universally salient across both models despite their differing emphasis.
+    \end{itemize}
+
+    \item \textbf{Overall:}
+    \begin{itemize}
+        \item SHAP focuses on dramatic moments and emotional spikes.
+        \item LIME captures the procedural, social, and day-to-day flow.
+        \item Their combined insights offer a layered interpretation of the text, where the overlap marks the narrative's backbone.
+    \end{itemize}
+\end{itemize}

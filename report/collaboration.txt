@@ -1,22 +1,19 @@
 We have all agreed on these attributions:
 
 Ashley Zhang worked on:
-- Designing and training thr BERT model
-- Coding the BERT model except the loss function and masking
-- Hyperparameter tuning of the BERT model
-- Extract chunck embeddings with BERT
-- Writing the corresponding sections in the report, plus the introduction and conclusion
-- Final review of the report
+Training the ridge regression model
+Finetuning the BERT model with LoRA
+Writing the corresponding sections in the report
 
 Kishore Chidambaram worked on:
-- Train the ridge regression and hyperparameter tuning
-- Post-hoc analysis of the ridge regression
-- Stability analysis of the ridge regression
-- Writing the corresponding sections in the report
+Retrained old models from Labs 3.1 and 3.2 for consistent train/val/test splits and voxels
+Generated distributions of CC across voxels for various models
+Analysis comparison of various models across 3 Lab parts
+Writing the corresponding sections in the report
 
-Connor McCaffrey worked on:
-- Coding the loss function for the BERT model
-
-Rawi Baransy worked on:
-- Coding the masking function for the BERT model
-- Helping the modeling process
+Connor McCaffrey and Rawi Baransy worked on:
+Implemented function to identify top-performing voxels
+Implemented SHAP and LIME for two test stories
+Processed SHAP and LIME values into clean tabular format
+Created boxplots and heatmaps for analyzing word rankings
+Writing the corresponding sections in the report
