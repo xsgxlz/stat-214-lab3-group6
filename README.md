@@ -4,3 +4,7 @@ Description of code files for clarity and reproducibility:
 - code/word_embeddings.py: This file contains the components for getting all the 3 types of embeddings (BoW, Word2Vec, and GloVe)
 - code/EDA folder: This folder contains the EDA notebooks and a README file detailing the files in the folder.
 - code/BERT folder: This folder contains the BERT-style encoder code and a README file detailing the files in the folder.
+- code/interpretation folder: This folder contains the notebooks for interpreting the model's predictions using SHAP and LIME.
+- code/finetune_bert_utils.py: This file contains the components for finetuning the BERT-style encoder on the story-level data.
+- code/pretrained_bert_ridge.ipynb: This notebook for training a Ridge regression model using the pre-trained BERT-style encoder.
+- code/pretrained_bert_lora.ipynb: This notebook for finetuning the pre-trained BERT-style encoder using LoRA.
