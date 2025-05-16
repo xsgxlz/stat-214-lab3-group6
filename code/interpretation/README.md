@@ -8,6 +8,7 @@ This directory contains three primary notebooks:
 2. `clean.ipynb`: This Python notebook loads the `.pkl` files from above, flattens them from 3D to 2D, cleans them, then saves them to `{score}_{story}_subj{subject}.csv` (8 separate files, found in `data` directory).
 
 3. `importance_plots.ipynb` : This R notebook loads the `.csv` files from above, merges and cleans the data further, then saves it to `{story}.csv` (2 separate files, found in `data` directory). The remainder of the notebook generates various plots for analysis of SHAP and LIME values (found in `figs` directory).
+4. `lab 3 code.qmd`: This python qmd file loads the `.pkl` files from above and creates several scatterplots, barplots and distribution plots to analyse the relationship and differences between SHAP and LIME methods
 
 
 ##### Relevant Data
